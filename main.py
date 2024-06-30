@@ -9,7 +9,7 @@ from reportlab.pdfgen import canvas
 from PIL import Image, ImageTk
 
 class Booking:
-    def __init__(self, booking_id, name, campsite, start_date, end_date, checkin_time, checkout_time, people, status, extras, extras_paid, kayaks, kayaks_count):
+    def __init__(self, booking_id, name, campsite, start_date, end_date, checkin_time, checkout_time, people, status, extras, extras_paid, kayaks, kayaks_count, is_group_booking):
         self.booking_id = booking_id
         self.name = name
         self.campsite = campsite
@@ -23,6 +23,7 @@ class Booking:
         self.extras_paid = extras_paid
         self.kayaks = kayaks
         self.kayaks_count = kayaks_count
+        self.is_group_booking = is_group_booking
 
     def to_dict(self):
         return {
@@ -38,77 +39,94 @@ class Booking:
             "Extras": self.extras,
             "Extras Paid": self.extras_paid,
             "Kayaks": self.kayaks,
-            "Kayaks Count": self.kayaks_count
+            "Kayaks Count": self.kayaks_count,
+            "Is Group Booking": self.is_group_booking
         }
 
 class BookingManager:
     def __init__(self, master):
         self.master = master
         self.master.title("Warrago Farm, Condamine River Caravan & Camping - Booking Manager")
-        self.master.attributes('-zoomed', True)
+        self.master.geometry("800x600")
         self.master.resizable(True, True)
-        self.master.grid_rowconfigure(1, weight=1)
-        self.master.grid_columnconfigure(1, weight=1)
 
         self.bookings = []
         self.next_booking_id = 1
-        self.load_bookings()
+        self.load_all_bookings()
 
         self.campsites = {
-            '1a': 4, '1b': 4, '1c': 4, '1d': 4,
-            '2a': 4, '2b': 4, '2c': 4, '2d': 4,
-            '3': 4, '4': 4, '5': 4,
-            '6a': 4, '6b': 4,
-            'Sandy': 10,
-            'Jerrys': 4,
-            'Gidgea Flats': 30
+            '1a': 25, '1b': 25, '1c': 25, '1d': 25,
+            '2a': 25, '2b': 25, '2c': 25, '2d': 25,
+            '3': 15, '4': 15, '5': 15,
+            '6a': 15, '6b': 15,
+            'Sandys': 15,  # 15 sites each holding 15 people
+            'Jerrys': 20,  # 1 site holding 20 people
+            'Gidgea Flats': 15  # 30 sites each holding 15 people
         }
 
         self.create_widgets()
 
-    def load_bookings(self):
+    def load_all_bookings(self):
         if os.path.exists('bookings.csv'):
-            df = pd.read_csv('bookings.csv', parse_dates=['Start Date', 'End Date'])
-            for _, row in df.iterrows():
-                booking = Booking(
-                    booking_id=row['ID'],
-                    name=row['Name'],
-                    campsite=row['Campsite'],
-                    start_date=row['Start Date'],
-                    end_date=row['End Date'],
-                    checkin_time=row['Check-in Time'],
-                    checkout_time=row['Check-out Time'],
-                    people=row['People'],
-                    status=row['Status'],
-                    extras=row['Extras'],
-                    extras_paid=row['Extras Paid'],
-                    kayaks=row['Kayaks'],
-                    kayaks_count=row['Kayaks Count']
-                )
-                self.bookings.append(booking)
-                if booking.booking_id >= self.next_booking_id:
-                    self.next_booking_id = booking.booking_id + 1
+            self.bookings_df = pd.read_csv('bookings.csv', parse_dates=['Start Date', 'End Date'])
+            if 'Is Group Booking' not in self.bookings_df.columns:
+                self.bookings_df['Is Group Booking'] = False
+            self.next_booking_id = self.bookings_df['ID'].max() + 1
+        else:
+            self.bookings_df = pd.DataFrame(columns=[
+                'ID', 'Name', 'Campsite', 'Start Date', 'End Date',
+                'Check-in Time', 'Check-out Time', 'People', 'Status',
+                'Extras', 'Extras Paid', 'Kayaks', 'Kayaks Count', 'Is Group Booking'
+            ])
+
+    def load_bookings(self, year, month):
+        start_date = datetime(year, month, 1)
+        end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        bookings = self.bookings_df[
+            (self.bookings_df['Start Date'] <= end_date) &
+            (self.bookings_df['End Date'] >= start_date)
+        ]
+        self.bookings = [
+            Booking(
+                booking_id=row['ID'],
+                name=row['Name'],
+                campsite=row['Campsite'],
+                start_date=row['Start Date'],
+                end_date=row['End Date'],
+                checkin_time=row['Check-in Time'],
+                checkout_time=row['Check-out Time'],
+                people=row['People'],
+                status=row['Status'],
+                extras=row['Extras'],
+                extras_paid=row['Extras Paid'],
+                kayaks=row['Kayaks'],
+                kayaks_count=row['Kayaks Count'],
+                is_group_booking=row.get('Is Group Booking', False)
+            )
+            for _, row in bookings.iterrows()
+        ]
 
     def save_bookings(self):
         df = pd.DataFrame([b.to_dict() for b in self.bookings])
         df.to_csv('bookings.csv', index=False)
+        self.load_all_bookings()
 
     def create_widgets(self):
         main_frame = tk.Frame(self.master, padx=10, pady=10)
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         main_frame.grid_rowconfigure(1, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
         main_frame.grid_columnconfigure(1, weight=1)
 
         # Add logo and branding
-        logo = Image.open("warrago_farm_logo.png")  # Make sure to place your logo image in the same directory
+        logo = Image.open("warrago_farm_logo.png")
         logo = logo.resize((150, 150), Image.Resampling.LANCZOS)
         logo = ImageTk.PhotoImage(logo)
         logo_label = tk.Label(main_frame, image=logo)
         logo_label.image = logo  # keep a reference!
         logo_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
 
-        header_label = tk.Label(main_frame, text="Warrago Farm \n Condamine River Caravan & Camping", font=("Helvetica", 35))
+        header_label = tk.Label(main_frame, text="Warrago Farm \n Condamine River Caravan & Camping", font=("Helvetica", 24))
         header_label.grid(row=0, column=1, padx=10, pady=10, sticky="w")
 
         self.calendar_frame = tk.Frame(main_frame)
@@ -130,6 +148,7 @@ class BookingManager:
 
         self.current_month = datetime.now().month
         self.current_year = datetime.now().year
+        self.load_bookings(self.current_year, self.current_month)
         self.display_calendar(self.current_year, self.current_month)
 
         self.booking_frame = tk.Frame(main_frame)
@@ -184,6 +203,11 @@ class BookingManager:
 
         self.form_vars["Check-in Time"].set("13:00")
         self.form_vars["Check-out Time"].set("11:00")
+
+        tk.Label(self.scrollable_frame, text="Group Booking").grid(row=9, column=0, sticky="e")
+        self.group_booking_var = tk.BooleanVar()
+        self.group_booking_checkbutton = tk.Checkbutton(self.scrollable_frame, variable=self.group_booking_var)
+        self.group_booking_checkbutton.grid(row=9, column=1, sticky="w")
 
         self.create_extras_section()
 
@@ -286,6 +310,7 @@ class BookingManager:
             self.current_year -= 1
         else:
             self.current_month -= 1
+        self.load_bookings(self.current_year, self.current_month)
         self.display_calendar(self.current_year, self.current_month)
 
     def next_month(self):
@@ -294,6 +319,7 @@ class BookingManager:
             self.current_year += 1
         else:
             self.current_month += 1
+        self.load_bookings(self.current_year, self.current_month)
         self.display_calendar(self.current_year, self.current_month)
 
     def add_booking(self):
@@ -303,6 +329,7 @@ class BookingManager:
         booking_data['People'] = int(self.form_vars['People'].get() or 0)
         booking_data['Kayaks'] = self.extras_vars['Kayaks'].get()
         booking_data['Kayaks Count'] = int(self.extras_vars['Kayaks Count'].get() or 0)
+        booking_data['Is Group Booking'] = self.group_booking_var.get()
 
         extras_data = {key: (int(var.get()) if var.get().isdigit() else 0) for key, var in self.extras_vars.items() if isinstance(var, tk.StringVar)}
         extras_booleans = {key: var.get() for key, var in self.extras_vars.items() if isinstance(var, tk.BooleanVar)}
@@ -323,7 +350,7 @@ class BookingManager:
             messagebox.showerror("Time Error", "Time must be in HH:MM format.")
             return
 
-        if self.is_site_booked(booking_data['Campsite'], booking_data['Start Date'], booking_data['End Date'], booking_data['Check-in Time'], booking_data['Check-out Time']):
+        if not booking_data['Is Group Booking'] and self.is_site_booked(booking_data['Campsite'], booking_data['Start Date'], booking_data['End Date'], booking_data['Check-in Time'], booking_data['Check-out Time']):
             messagebox.showerror("Booking Error", "This campsite is already booked for the selected dates and times.")
             return
 
@@ -343,7 +370,8 @@ class BookingManager:
             extras=extras_summary,
             extras_paid=extras_paid,
             kayaks=booking_data['Kayaks'],
-            kayaks_count=booking_data['Kayaks Count']
+            kayaks_count=booking_data['Kayaks Count'],
+            is_group_booking=booking_data['Is Group Booking']
         )
         self.bookings.append(new_booking)
         self.next_booking_id += 1
@@ -367,7 +395,7 @@ class BookingManager:
 
     def is_site_booked(self, campsite, start_date, end_date, start_time, end_time):
         for booking in self.bookings:
-            if booking.campsite == campsite and booking.status != 'Canceled':
+            if booking.campsite == campsite and booking.status != 'Canceled' and not booking.is_group_booking:
                 if start_date <= booking.end_date and end_date >= booking.start_date:
                     if start_date == booking.end_date and start_time < booking.checkout_time:
                         return True
@@ -712,6 +740,7 @@ class BookingManager:
             messagebox.showinfo("Export Success", f"Data exported successfully to {file_path}")
 
     def update_calendar(self):
+        self.load_bookings(self.current_year, self.current_month)
         for widget in self.calendar_frame.winfo_children():
             if isinstance(widget, tk.Button):
                 date = widget.cget("text")
