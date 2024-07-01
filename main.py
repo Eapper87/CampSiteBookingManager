@@ -172,7 +172,7 @@ class BookingManager:
             logo_label.config(image=logo_image)
             logo_label.image = logo_image
 
-        logo_original = Image.open("warrago_farm_logo.png")
+        logo_original = Image.open("logo.png")
         logo_placeholder = logo_original.resize((200, 200), Image.Resampling.LANCZOS)
         logo_image = ImageTk.PhotoImage(logo_placeholder)
 
