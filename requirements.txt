@@ -3,3 +3,4 @@ pandas
 tkcalendar
 reportlab
 Pillow
+tabulate
