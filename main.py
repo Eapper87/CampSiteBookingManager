@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageTk
 from typing import List, Dict, Any, Tuple
 from tabulate import tabulate
+import random
 
 # Constants
 DATE_PATTERN = 'dd/MM/yyyy'
@@ -71,6 +72,7 @@ class BookingManager:
         self.bookings: List[Booking] = []
         self.next_booking_id: int = 1
         self.campsites: Dict[str, int] = CAMPSITES
+        self.color_map = {}
         self.load_all_bookings()
         self.create_widgets()
 
@@ -360,10 +362,10 @@ class BookingManager:
             day_str = f"{day:02d}/{month:02d}/{year}"
             day_btn = tk.Button(self.calendar_frame, text=str(day), width=12, height=5, command=lambda d=day_str: self.show_day_bookings(d))
             day_btn.grid(row=row, column=col, sticky="nsew")
-            bookings = self.get_booking_text_for_date(day_str)
+            bookings, colors = self.get_booking_text_for_date(day_str)
             if bookings:
                 day_btn.config(text=f"{day}\n{bookings}", anchor='n')
-                day_btn.config(background='red')
+                day_btn.config(background=colors[0] if colors else 'red')
             else:
                 day_btn.config(background='green')
             col += 1
@@ -392,11 +394,16 @@ class BookingManager:
         self.load_bookings(self.current_year, self.current_month)
         self.display_calendar(self.current_year, self.current_month)
 
-    def get_booking_text_for_date(self, date: str) -> str:
+    def get_booking_text_for_date(self, date: str) -> Tuple[str, List[str]]:
         date = pd.Timestamp(datetime.strptime(date, '%d/%m/%Y'))
         bookings_text = []
+        colors = []
         for booking in self.bookings:
             if booking.start_date <= date <= booking.end_date:
+                if booking.campsite not in self.color_map:
+                    self.color_map[booking.campsite] = self.generate_random_color()
+                color = self.color_map[booking.campsite]
+                colors.append(color)
                 if booking.start_date == date and booking.end_date == date:
                     bookings_text.append(f"{booking.campsite} {booking.name} (in/out)")
                 elif booking.start_date == date:
@@ -405,7 +412,10 @@ class BookingManager:
                     bookings_text.append(f"{booking.campsite} {booking.name} (out)")
                 else:
                     bookings_text.append(f"{booking.campsite} {booking.name}")
-        return '\n'.join(bookings_text)
+        return '\n'.join(bookings_text), colors
+
+    def generate_random_color(self) -> str:
+        return "#{:02x}{:02x}{:02x}".format(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
     def add_booking(self) -> None:
         try:
@@ -867,10 +877,10 @@ class BookingManager:
                 if isinstance(widget, tk.Button):
                     date = widget.cget("text").split("\n")[0]
                     day_str = f"{int(date):02d}/{self.current_month:02d}/{self.current_year}"
-                    bookings = self.get_booking_text_for_date(day_str)
+                    bookings, colors = self.get_booking_text_for_date(day_str)
                     if bookings:
                         widget.config(text=f"{date}\n{bookings}", anchor='n')
-                        widget.config(background='red')
+                        widget.config(background=colors[0] if colors else 'red')
                     else:
                         widget.config(background='green')
         except Exception as e:
